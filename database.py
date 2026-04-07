@@ -19,16 +19,22 @@ class Visitor(Base):
     __tablename__ = "visitors"
 
     id               = Column(Integer, primary_key=True, index=True)
-    visitor_id       = Column(String, unique=True, index=True)   # SHA-256 of key attributes
+    visitor_id       = Column(String, unique=True, index=True)
+
+    # Network (server-side)
+    ip_address       = Column(String)
+    user_country     = Column(String)    # from CF-IPCountry header if available
 
     # Identity / label
-    device_label     = Column(String)      # e.g. "iPhone / Safari"
+    device_label     = Column(String)
 
     # Core navigator
     user_agent       = Column(Text)
     platform         = Column(String)
     language         = Column(String)
+    languages        = Column(String)    # full list e.g. "en-US, en, fr"
     timezone         = Column(String)
+    timezone_offset  = Column(Integer)   # minutes from UTC
     hardware_concurrency = Column(Integer)
     device_memory    = Column(String)
     touch_points     = Column(Integer)
@@ -36,38 +42,52 @@ class Visitor(Base):
     do_not_track     = Column(String)
     webdriver        = Column(Boolean)
     pdf_viewer       = Column(Boolean)
+    vendor           = Column(String)    # e.g. "Apple Computer, Inc."
 
     # Screen
-    screen_resolution = Column(String)     # e.g. "1920x1080"
-    avail_resolution  = Column(String)     # available (excluding taskbar)
-    color_depth       = Column(Integer)
-    pixel_depth       = Column(Integer)
-    pixel_ratio       = Column(Float)
-    orientation       = Column(String)
+    screen_resolution  = Column(String)
+    avail_resolution   = Column(String)
+    color_depth        = Column(Integer)
+    pixel_depth        = Column(Integer)
+    pixel_ratio        = Column(Float)
+    orientation        = Column(String)
+
+    # Input / pointer
+    pointer_type     = Column(String)    # fine / coarse / none
+    hover_support    = Column(String)    # hover / none
+    any_pointer      = Column(String)
+    any_hover        = Column(String)
+
+    # CSS media features
+    prefers_dark     = Column(String)    # dark / light
+    prefers_reduced  = Column(String)    # reduce / no-preference
+    color_gamut      = Column(String)    # srgb / p3 / rec2020
+    hdr              = Column(String)    # high / standard / no-preference
+    forced_colors    = Column(String)    # active / none
 
     # Canvas
     canvas_hash      = Column(String)
 
-    # WebGL — very high entropy
-    webgl_renderer   = Column(String)
-    webgl_vendor     = Column(String)
-    webgl_version    = Column(String)
-    webgl_shading    = Column(String)
-    webgl_extensions = Column(Integer)
-    webgl_max_texture = Column(Integer)
-    webgl_max_viewport = Column(String)
+    # WebGL
+    webgl_renderer      = Column(String)
+    webgl_vendor        = Column(String)
+    webgl_version       = Column(String)
+    webgl_shading       = Column(String)
+    webgl_extensions    = Column(Integer)
+    webgl_max_texture   = Column(Integer)
+    webgl_max_viewport  = Column(String)
 
-    # Audio fingerprint
+    # Audio
     audio_hash       = Column(String)
 
     # Fonts
-    fonts_detected   = Column(Text)        # JSON list of detected font names
+    fonts_detected   = Column(Text)      # JSON list
     fonts_count      = Column(Integer)
 
     # Math entropy
     math_hash        = Column(Text)
 
-    # Speech synthesis
+    # Speech
     speech_voices    = Column(Integer)
 
     # Connection
@@ -81,11 +101,18 @@ class Visitor(Base):
     microphones      = Column(Integer)
     speakers         = Column(Integer)
 
+    # Codecs
+    video_codecs     = Column(String)    # JSON
+    audio_codecs     = Column(String)    # JSON
+
     # Battery
     battery_charging = Column(String)
     battery_level    = Column(String)
 
-    # Full raw JSON payload from browser
+    # WebRTC local IP
+    local_ip         = Column(String)
+
+    # Full raw JSON
     raw_data         = Column(Text)
 
     # Visit tracking

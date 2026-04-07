@@ -1,11 +1,5 @@
 """
 Fingerprint Server — FastAPI backend
--------------------------------------
-Routes:
-  GET  /              → Landing page (what NFC tag opens)
-  POST /api/fingerprint → Receive fingerprint from browser JS, store in DB
-  GET  /dashboard     → Admin view of all logged visitors
-  GET  /visitor/{id}  → Detail page for one visitor
 """
 import hashlib
 import json
@@ -20,22 +14,16 @@ from sqlalchemy.orm import Session
 
 from database import create_tables, get_db, Visitor
 
-# ---------------------------------------------------------------------------
-# App setup
-# ---------------------------------------------------------------------------
 app = FastAPI(title="Fingerprint Server")
 templates = Jinja2Templates(directory="templates")
 create_tables()
 
-# ---------------------------------------------------------------------------
-# Customise these — shown on the landing page
-# ---------------------------------------------------------------------------
 WELCOME_MESSAGE = "Welcome! Your device has been registered."
 DEMO_SUBTITLE   = "NFC Fingerprint Demo"
 
 
 # ---------------------------------------------------------------------------
-# Pydantic schema — all fields from the browser
+# Pydantic schema
 # ---------------------------------------------------------------------------
 class FingerprintPayload(BaseModel):
     # Core
@@ -44,7 +32,9 @@ class FingerprintPayload(BaseModel):
     screen_width:         int   = 0
     screen_height:        int   = 0
     language:             str   = ""
+    languages:            str   = ""
     timezone:             str   = ""
+    timezone_offset:      int   = 0
     touch_points:         int   = 0
     hardware_concurrency: int   = 0
     device_memory:        str   = "unknown"
@@ -56,6 +46,17 @@ class FingerprintPayload(BaseModel):
     pixel_depth:          int   = 0
     pixel_ratio:          float = 1.0
     orientation:          str   = ""
+    # Input / pointer
+    pointer_type:         str   = ""
+    hover_support:        str   = ""
+    any_pointer:          str   = ""
+    any_hover:            str   = ""
+    # CSS media features
+    prefers_dark:         str   = ""
+    prefers_reduced:      str   = ""
+    color_gamut:          str   = ""
+    hdr:                  str   = ""
+    forced_colors:        str   = ""
     # WebGL
     webgl_renderer:       str   = ""
     webgl_vendor:         str   = ""
@@ -83,7 +84,12 @@ class FingerprintPayload(BaseModel):
     cameras:              int   = 0
     microphones:          int   = 0
     speakers:             int   = 0
-    # Permissions, storage, css, nav, battery stored as raw JSON only
+    # Codecs
+    video_codecs:         Optional[Dict[str, Any]] = None
+    audio_codecs:         Optional[Dict[str, Any]] = None
+    # WebRTC local IP
+    local_ip:             str   = ""
+    # Dicts stored as JSON
     permissions:          Optional[Dict[str, Any]] = None
     storage:              Optional[Dict[str, Any]] = None
     css_features:         Optional[Dict[str, Any]] = None
@@ -94,42 +100,41 @@ class FingerprintPayload(BaseModel):
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+def get_client_ip(request: Request) -> str:
+    # Railway (and most proxies) set X-Forwarded-For
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
 def make_visitor_id(p: FingerprintPayload) -> str:
-    """SHA-256 over the highest-entropy attributes → 16-char hex ID."""
     parts = [
-        p.user_agent,
-        p.platform,
-        str(p.screen_width), str(p.screen_height),
-        str(p.pixel_ratio),
-        p.timezone,
-        str(p.hardware_concurrency),
-        p.device_memory,
-        p.canvas_hash,
-        p.audio_hash,
-        p.webgl_renderer,
-        p.webgl_vendor,
-        p.math_hash,
-        ",".join(sorted(p.fonts)),
+        p.user_agent, p.platform,
+        str(p.screen_width), str(p.screen_height), str(p.pixel_ratio),
+        p.timezone, str(p.hardware_concurrency), p.device_memory,
+        p.canvas_hash, p.audio_hash,
+        p.webgl_renderer, p.webgl_vendor,
+        p.math_hash, ",".join(sorted(p.fonts)),
     ]
-    raw = "|".join(parts)
-    return hashlib.sha256(raw.encode()).hexdigest()[:16]
+    return hashlib.sha256("|".join(parts).encode()).hexdigest()[:16]
 
 
 def make_device_label(p: FingerprintPayload) -> str:
     ua = p.user_agent.lower()
-    if "iphone" in ua:   os_part = "iPhone"
-    elif "ipad" in ua:   os_part = "iPad"
+    if "iphone" in ua:    os_part = "iPhone"
+    elif "ipad" in ua:    os_part = "iPad"
     elif "android" in ua: os_part = "Android"
-    elif "mac" in ua:    os_part = "Mac"
+    elif "mac" in ua:     os_part = "Mac"
     elif "windows" in ua: os_part = "Windows"
-    elif "linux" in ua:  os_part = "Linux"
-    else:                os_part = p.platform or "Unknown"
+    elif "linux" in ua:   os_part = "Linux"
+    else:                 os_part = p.platform or "Unknown"
 
-    if "edg/" in ua:     browser = "Edge"
-    elif "chrome" in ua and "safari" in ua: browser = "Chrome"
-    elif "firefox" in ua: browser = "Firefox"
-    elif "safari" in ua: browser = "Safari"
-    else:                browser = "Browser"
+    if "edg/" in ua:                          browser = "Edge"
+    elif "chrome" in ua and "safari" in ua:   browser = "Chrome"
+    elif "firefox" in ua:                     browser = "Firefox"
+    elif "safari" in ua:                      browser = "Safari"
+    else:                                     browser = "Browser"
 
     return f"{os_part} / {browser}"
 
@@ -148,13 +153,20 @@ async def landing(request: Request):
 
 
 @app.post("/api/fingerprint")
-async def receive_fingerprint(payload: FingerprintPayload, db: Session = Depends(get_db)):
-    visitor_id = make_visitor_id(payload)
-    existing   = db.query(Visitor).filter(Visitor.visitor_id == visitor_id).first()
+async def receive_fingerprint(
+    payload: FingerprintPayload,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    visitor_id  = make_visitor_id(payload)
+    ip_address  = get_client_ip(request)
+    country     = request.headers.get("cf-ipcountry", "")   # Cloudflare header
+    existing    = db.query(Visitor).filter(Visitor.visitor_id == visitor_id).first()
 
     if existing:
         existing.last_seen   = datetime.utcnow()
         existing.visit_count += 1
+        existing.ip_address  = ip_address   # update to latest IP
         db.commit()
         return {
             "visitor_id":   visitor_id,
@@ -165,50 +177,68 @@ async def receive_fingerprint(payload: FingerprintPayload, db: Session = Depends
 
     device_label = make_device_label(payload)
     bat          = payload.battery or {}
+    nav          = payload.nav or {}
 
     new_visitor = Visitor(
-        visitor_id          = visitor_id,
-        device_label        = device_label,
-        user_agent          = payload.user_agent,
-        platform            = payload.platform,
-        language            = payload.language,
-        timezone            = payload.timezone,
-        hardware_concurrency= payload.hardware_concurrency,
-        device_memory       = payload.device_memory,
-        touch_points        = payload.touch_points,
-        plugins_count       = (payload.nav or {}).get("plugins_count", 0),
-        do_not_track        = (payload.nav or {}).get("do_not_track", "unset"),
-        webdriver           = bool((payload.nav or {}).get("webdriver", False)),
-        pdf_viewer          = bool((payload.nav or {}).get("pdf_viewer", False)),
-        screen_resolution   = f"{payload.screen_width}x{payload.screen_height}",
-        avail_resolution    = f"{payload.avail_width}x{payload.avail_height}",
-        color_depth         = payload.color_depth,
-        pixel_depth         = payload.pixel_depth,
-        pixel_ratio         = payload.pixel_ratio,
-        orientation         = payload.orientation,
-        canvas_hash         = payload.canvas_hash,
-        webgl_renderer      = payload.webgl_renderer,
-        webgl_vendor        = payload.webgl_vendor,
-        webgl_version       = payload.webgl_version,
-        webgl_shading       = payload.webgl_shading,
-        webgl_extensions    = payload.webgl_extensions,
-        webgl_max_texture   = payload.webgl_max_texture,
-        webgl_max_viewport  = payload.webgl_max_viewport,
-        audio_hash          = payload.audio_hash,
-        fonts_detected      = json.dumps(payload.fonts),
-        fonts_count         = payload.fonts_count,
-        math_hash           = payload.math_hash,
-        speech_voices       = payload.speech_voices,
-        connection_type     = payload.connection_type,
-        effective_type      = payload.effective_type,
-        downlink            = payload.downlink,
-        rtt                 = payload.rtt,
-        cameras             = payload.cameras,
-        microphones         = payload.microphones,
-        speakers            = payload.speakers,
-        battery_charging    = str(bat.get("charging", "")) if bat.get("charging") is not None else "unknown",
-        battery_level       = str(bat.get("level", ""))    if bat.get("level")    is not None else "unknown",
-        raw_data            = json.dumps(payload.dict()),
+        visitor_id           = visitor_id,
+        ip_address           = ip_address,
+        user_country         = country,
+        device_label         = device_label,
+        user_agent           = payload.user_agent,
+        platform             = payload.platform,
+        language             = payload.language,
+        languages            = payload.languages,
+        timezone             = payload.timezone,
+        timezone_offset      = payload.timezone_offset,
+        hardware_concurrency = payload.hardware_concurrency,
+        device_memory        = payload.device_memory,
+        touch_points         = payload.touch_points,
+        plugins_count        = nav.get("plugins_count", 0),
+        do_not_track         = nav.get("do_not_track", "unset"),
+        webdriver            = bool(nav.get("webdriver", False)),
+        pdf_viewer           = bool(nav.get("pdf_viewer", False)),
+        vendor               = nav.get("vendor", ""),
+        screen_resolution    = f"{payload.screen_width}x{payload.screen_height}",
+        avail_resolution     = f"{payload.avail_width}x{payload.avail_height}",
+        color_depth          = payload.color_depth,
+        pixel_depth          = payload.pixel_depth,
+        pixel_ratio          = payload.pixel_ratio,
+        orientation          = payload.orientation,
+        pointer_type         = payload.pointer_type,
+        hover_support        = payload.hover_support,
+        any_pointer          = payload.any_pointer,
+        any_hover            = payload.any_hover,
+        prefers_dark         = payload.prefers_dark,
+        prefers_reduced      = payload.prefers_reduced,
+        color_gamut          = payload.color_gamut,
+        hdr                  = payload.hdr,
+        forced_colors        = payload.forced_colors,
+        canvas_hash          = payload.canvas_hash,
+        webgl_renderer       = payload.webgl_renderer,
+        webgl_vendor         = payload.webgl_vendor,
+        webgl_version        = payload.webgl_version,
+        webgl_shading        = payload.webgl_shading,
+        webgl_extensions     = payload.webgl_extensions,
+        webgl_max_texture    = payload.webgl_max_texture,
+        webgl_max_viewport   = payload.webgl_max_viewport,
+        audio_hash           = payload.audio_hash,
+        fonts_detected       = json.dumps(payload.fonts),
+        fonts_count          = payload.fonts_count,
+        math_hash            = payload.math_hash,
+        speech_voices        = payload.speech_voices,
+        connection_type      = payload.connection_type,
+        effective_type       = payload.effective_type,
+        downlink             = payload.downlink,
+        rtt                  = payload.rtt,
+        cameras              = payload.cameras,
+        microphones          = payload.microphones,
+        speakers             = payload.speakers,
+        video_codecs         = json.dumps(payload.video_codecs or {}),
+        audio_codecs         = json.dumps(payload.audio_codecs or {}),
+        battery_charging     = str(bat.get("charging", "")) if bat.get("charging") is not None else "unknown",
+        battery_level        = str(bat.get("level", ""))    if bat.get("level")    is not None else "unknown",
+        local_ip             = payload.local_ip,
+        raw_data             = json.dumps(payload.dict()),
     )
     db.add(new_visitor)
     db.commit()
@@ -235,11 +265,15 @@ async def visitor_detail(visitor_id: str, request: Request, db: Session = Depend
     visitor = db.query(Visitor).filter(Visitor.visitor_id == visitor_id).first()
     if not visitor:
         return HTMLResponse("<h2>Visitor not found</h2>", status_code=404)
-    raw   = json.loads(visitor.raw_data)   if visitor.raw_data    else {}
+    raw   = json.loads(visitor.raw_data)       if visitor.raw_data       else {}
     fonts = json.loads(visitor.fonts_detected) if visitor.fonts_detected else []
+    vcod  = json.loads(visitor.video_codecs)   if visitor.video_codecs   else {}
+    acod  = json.loads(visitor.audio_codecs)   if visitor.audio_codecs   else {}
     return templates.TemplateResponse("visitor.html", {
-        "request": request,
-        "visitor": visitor,
-        "raw":     raw,
-        "fonts":   fonts,
+        "request":      request,
+        "visitor":      visitor,
+        "raw":          raw,
+        "fonts":        fonts,
+        "video_codecs": vcod,
+        "audio_codecs": acod,
     })

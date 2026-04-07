@@ -8,48 +8,27 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #0f0f0f;
-      color: #f0f0f0;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 2rem;
-      text-align: center;
+      background: #0f0f0f; color: #f0f0f0;
+      min-height: 100vh; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; padding: 2rem; text-align: center;
     }
     .card {
-      background: #1a1a2e;
-      border: 1px solid #3a3a5c;
-      border-radius: 16px;
-      padding: 2.5rem 2rem;
-      max-width: 420px;
-      width: 100%;
+      background: #1a1a2e; border: 1px solid #3a3a5c; border-radius: 16px;
+      padding: 2.5rem 2rem; max-width: 420px; width: 100%;
       box-shadow: 0 8px 32px rgba(0,0,0,0.4);
     }
     .icon { font-size: 3rem; margin-bottom: 1rem; }
     h1 { font-size: 1.5rem; margin-bottom: 0.5rem; color: #a78bfa; }
     .subtitle { color: #888; font-size: 0.9rem; margin-bottom: 1.5rem; }
-    .status {
-      padding: 1rem;
-      border-radius: 10px;
-      font-size: 1rem;
-      margin-top: 1.5rem;
-      display: none;
-    }
+    .status { padding: 1rem; border-radius: 10px; font-size: 1rem; margin-top: 1.5rem; display: none; }
     .status.new       { background: #14532d; border: 1px solid #22c55e; color: #86efac; }
     .status.returning { background: #1e3a5f; border: 1px solid #3b82f6; color: #93c5fd; }
     .status.error     { background: #3b1515; border: 1px solid #ef4444; color: #fca5a5; }
     .visitor-id { font-family: monospace; font-size: 0.8rem; color: #666; margin-top: 1rem; word-break: break-all; }
     .spinner {
-      display: inline-block;
-      width: 1.2rem; height: 1.2rem;
-      border: 3px solid #555;
-      border-top-color: #a78bfa;
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-      vertical-align: middle;
-      margin-right: 0.4rem;
+      display: inline-block; width: 1.2rem; height: 1.2rem;
+      border: 3px solid #555; border-top-color: #a78bfa; border-radius: 50%;
+      animation: spin 0.8s linear infinite; vertical-align: middle; margin-right: 0.4rem;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
     .device-info { margin-top: 1rem; font-size: 0.85rem; color: #aaa; }
@@ -68,12 +47,12 @@
   <script>
   (async () => {
 
-    // ── Canvas fingerprint ─────────────────────────────────────────────
+    // ── Canvas ────────────────────────────────────────────────────────
     function getCanvasHash() {
       try {
         const c = document.createElement("canvas");
-        const ctx = c.getContext("2d");
         c.width = 280; c.height = 60;
+        const ctx = c.getContext("2d");
         ctx.textBaseline = "alphabetic";
         ctx.fillStyle = "#f60";
         ctx.fillRect(125, 1, 62, 20);
@@ -83,17 +62,26 @@
         ctx.fillStyle = "rgba(102,204,0,0.7)";
         ctx.font = "16px Georgia";
         ctx.fillText("fingerprint \ud83c\udf42", 4, 45);
-        return c.toDataURL().slice(-80);
+        // add gradient + arc for more entropy
+        const grad = ctx.createLinearGradient(0, 0, 280, 0);
+        grad.addColorStop(0, "#a78bfa");
+        grad.addColorStop(1, "#ec4899");
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 50, 280, 5);
+        ctx.arc(60, 30, 15, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(255,165,0,0.5)";
+        ctx.fill();
+        return c.toDataURL().slice(-100);
       } catch(e) { return "unsupported"; }
     }
 
-    // ── WebGL fingerprint ──────────────────────────────────────────────
+    // ── WebGL ─────────────────────────────────────────────────────────
     function getWebGL() {
       try {
         const c = document.createElement("canvas");
         const gl = c.getContext("webgl") || c.getContext("experimental-webgl");
-        if (!gl) return { renderer:"unsupported", vendor:"unsupported", version:"", shading:"", extensions_count:0 };
-        const ext = gl.getExtension("WEBGL_debug_renderer_info");
+        if (!gl) return { renderer:"unsupported", vendor:"unsupported", version:"", shading:"", extensions_count:0, max_texture_size:0, max_viewport:"" };
+        const ext  = gl.getExtension("WEBGL_debug_renderer_info");
         const exts = gl.getSupportedExtensions() || [];
         return {
           renderer:         ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : "masked",
@@ -102,12 +90,12 @@
           shading:          gl.getParameter(gl.SHADING_LANGUAGE_VERSION),
           extensions_count: exts.length,
           max_texture_size: gl.getParameter(gl.MAX_TEXTURE_SIZE),
-          max_viewport:     gl.getParameter(gl.MAX_VIEWPORT_DIMS)?.join("x") || "",
+          max_viewport:     (gl.getParameter(gl.MAX_VIEWPORT_DIMS) || []).join("x"),
         };
-      } catch(e) { return { renderer:"error", vendor:"error", version:"", shading:"", extensions_count:0 }; }
+      } catch(e) { return { renderer:"error", vendor:"error", version:"", shading:"", extensions_count:0, max_texture_size:0, max_viewport:"" }; }
     }
 
-    // ── Audio fingerprint ──────────────────────────────────────────────
+    // ── Audio ─────────────────────────────────────────────────────────
     async function getAudioHash() {
       try {
         const ctx = new OfflineAudioContext(1, 44100, 44100);
@@ -122,8 +110,7 @@
         cmp.release.setValueAtTime(0.25, ctx.currentTime);
         osc.connect(cmp);
         cmp.connect(ctx.destination);
-        osc.start(0);
-        osc.stop(0.1);
+        osc.start(0); osc.stop(0.1);
         const buf = await ctx.startRendering();
         const data = buf.getChannelData(0);
         let sum = 0;
@@ -132,135 +119,124 @@
       } catch(e) { return "unsupported"; }
     }
 
-    // ── Font detection (canvas-based) ─────────────────────────────────
+    // ── Fonts ─────────────────────────────────────────────────────────
     function detectFonts() {
       const testFonts = [
-        "Arial","Arial Black","Calibri","Cambria","Comic Sans MS","Consolas",
-        "Courier New","Franklin Gothic Medium","Futura","Garamond","Geneva",
-        "Georgia","Gill Sans","Helvetica","Impact","Lucida Console",
-        "Lucida Sans Unicode","Microsoft Sans Serif","Monaco","Optima",
-        "Palatino","Roboto","Segoe UI","SF Pro Display","Tahoma",
+        "Arial","Arial Black","Arial Narrow","Calibri","Cambria","Comic Sans MS",
+        "Consolas","Courier New","Franklin Gothic Medium","Futura","Garamond",
+        "Geneva","Georgia","Gill Sans","Helvetica","Helvetica Neue","Impact",
+        "Lucida Console","Lucida Sans Unicode","Microsoft Sans Serif","Monaco",
+        "Optima","Palatino","Roboto","Segoe UI","SF Pro Display","Tahoma",
         "Times New Roman","Trebuchet MS","Verdana","Wingdings",
       ];
-      const c = document.createElement("canvas");
+      const c   = document.createElement("canvas");
       const ctx = c.getContext("2d");
-      const sample = "mmmmwwwwiii XYZABC 0123456789";
-      const base = "monospace";
-      ctx.font = `16px ${base}`;
-      const baseW = ctx.measureText(sample).width;
+      const txt = "mmmmwwwwiiiiIIII0000llll";
+      ctx.font = `16px monospace`;
+      const base = ctx.measureText(txt).width;
       return testFonts.filter(f => {
-        ctx.font = `16px '${f}', ${base}`;
-        return ctx.measureText(sample).width !== baseW;
+        ctx.font = `16px '${f}', monospace`;
+        return ctx.measureText(txt).width !== base;
       });
     }
 
     // ── Math entropy ──────────────────────────────────────────────────
     function getMathHash() {
       return [
-        Math.tan(-1e300), Math.sqrt(2), Math.sin(1e-300),
-        Math.cos(0.1), Math.atan2(1e300, 1), 1 / Math.PI,
-        Math.log(Math.PI), Math.exp(1), Math.pow(2, -52),
+        Math.tan(-1e300), Math.sqrt(2), Math.sin(1e-300), Math.cos(0.1),
+        Math.atan2(1e300, 1), 1/Math.PI, Math.log(Math.PI),
+        Math.exp(1), Math.pow(2, -52), Math.sinh(1), Math.cosh(0),
       ].map(v => v.toString().slice(0, 12)).join("|");
     }
 
-    // ── Media devices (count only, no permission needed) ──────────────
+    // ── CSS media features ────────────────────────────────────────────
+    function getCSSMedia() {
+      const mq = (q) => window.matchMedia(q).matches;
+      return {
+        prefers_dark:    mq("(prefers-color-scheme: dark)")    ? "dark"          : "light",
+        prefers_reduced: mq("(prefers-reduced-motion: reduce)")? "reduce"        : "no-preference",
+        color_gamut:     mq("(color-gamut: rec2020)")          ? "rec2020"
+                       : mq("(color-gamut: p3)")               ? "p3"            : "srgb",
+        hdr:             mq("(dynamic-range: high)")           ? "high"          : "standard",
+        forced_colors:   mq("(forced-colors: active)")         ? "active"        : "none",
+        pointer_type:    mq("(pointer: fine)")                 ? "fine"
+                       : mq("(pointer: coarse)")               ? "coarse"        : "none",
+        hover_support:   mq("(hover: hover)")                  ? "hover"         : "none",
+        any_pointer:     mq("(any-pointer: fine)")             ? "fine"
+                       : mq("(any-pointer: coarse)")           ? "coarse"        : "none",
+        any_hover:       mq("(any-hover: hover)")              ? "hover"         : "none",
+      };
+    }
+
+    // ── Codec support ─────────────────────────────────────────────────
+    function getCodecs() {
+      const v = document.createElement("video");
+      const a = document.createElement("audio");
+      const canPlay = (el, t) => { try { return el.canPlayType(t) || "no"; } catch(e){ return "no"; }};
+      return {
+        video: {
+          h264:   canPlay(v, 'video/mp4; codecs="avc1.42E01E"'),
+          h265:   canPlay(v, 'video/mp4; codecs="hvc1"'),
+          vp8:    canPlay(v, 'video/webm; codecs="vp8"'),
+          vp9:    canPlay(v, 'video/webm; codecs="vp9"'),
+          av1:    canPlay(v, 'video/webm; codecs="av01.0.05M.08"'),
+        },
+        audio: {
+          mp3:    canPlay(a, "audio/mpeg"),
+          aac:    canPlay(a, 'audio/mp4; codecs="mp4a.40.2"'),
+          opus:   canPlay(a, 'audio/ogg; codecs="opus"'),
+          flac:   canPlay(a, 'audio/flac'),
+          vorbis: canPlay(a, 'audio/ogg; codecs="vorbis"'),
+        },
+      };
+    }
+
+    // ── WebRTC local IP ───────────────────────────────────────────────
+    async function getLocalIP() {
+      return new Promise(resolve => {
+        try {
+          const pc = new RTCPeerConnection({ iceServers: [] });
+          pc.createDataChannel("");
+          pc.createOffer().then(o => pc.setLocalDescription(o));
+          const found = new Set();
+          pc.onicecandidate = e => {
+            if (!e || !e.candidate) {
+              pc.close();
+              resolve([...found].join(", ") || "");
+              return;
+            }
+            const m = e.candidate.candidate.match(/\b(\d+\.\d+\.\d+\.\d+)\b/);
+            if (m) found.add(m[1]);
+          };
+          setTimeout(() => { pc.close(); resolve([...found].join(", ") || ""); }, 1000);
+        } catch(e) { resolve(""); }
+      });
+    }
+
+    // ── Media devices ─────────────────────────────────────────────────
     async function getMediaDevices() {
       try {
         const devs = await navigator.mediaDevices.enumerateDevices();
         return {
-          cameras:      devs.filter(d => d.kind === "videoinput").length,
-          microphones:  devs.filter(d => d.kind === "audioinput").length,
-          speakers:     devs.filter(d => d.kind === "audiooutput").length,
+          cameras:     devs.filter(d => d.kind === "videoinput").length,
+          microphones: devs.filter(d => d.kind === "audioinput").length,
+          speakers:    devs.filter(d => d.kind === "audiooutput").length,
         };
       } catch(e) { return { cameras:0, microphones:0, speakers:0 }; }
     }
 
-    // ── Speech synthesis voices ───────────────────────────────────────
-    function getSpeechVoices() {
-      try {
-        const voices = window.speechSynthesis.getVoices();
-        return voices.length;
-      } catch(e) { return 0; }
-    }
-
-    // ── Connection info ───────────────────────────────────────────────
-    function getConnection() {
-      const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-      if (!c) return { type:"unknown", effective_type:"unknown", downlink:0, rtt:0 };
-      return {
-        type:           c.type           || "unknown",
-        effective_type: c.effectiveType  || "unknown",
-        downlink:       c.downlink       || 0,
-        rtt:            c.rtt            || 0,
-        save_data:      c.saveData       || false,
-      };
-    }
-
-    // ── Permissions probe ─────────────────────────────────────────────
+    // ── Permissions ───────────────────────────────────────────────────
     async function getPermissions() {
-      const names = ["notifications", "geolocation", "camera", "microphone", "clipboard-read"];
-      const results = {};
-      for (const name of names) {
-        try {
-          const r = await navigator.permissions.query({ name });
-          results[name] = r.state;
-        } catch(e) { results[name] = "unknown"; }
+      const names = ["notifications","geolocation","camera","microphone","clipboard-read"];
+      const out = {};
+      for (const n of names) {
+        try { out[n] = (await navigator.permissions.query({ name: n })).state; }
+        catch(e) { out[n] = "unknown"; }
       }
-      return results;
+      return out;
     }
 
-    // ── Storage availability ──────────────────────────────────────────
-    function getStorage() {
-      return {
-        local_storage:   (() => { try { localStorage.setItem("_fp","1"); localStorage.removeItem("_fp"); return true; } catch(e){ return false; }})(),
-        session_storage: (() => { try { sessionStorage.setItem("_fp","1"); sessionStorage.removeItem("_fp"); return true; } catch(e){ return false; }})(),
-        indexed_db:      !!window.indexedDB,
-        cookies:         navigator.cookieEnabled,
-      };
-    }
-
-    // ── CSS feature detection ─────────────────────────────────────────
-    function getCSSFeatures() {
-      const el = document.documentElement;
-      return {
-        grid:           typeof el.style.grid === "string",
-        flexbox:        typeof el.style.flexBasis === "string",
-        css_variables:  window.CSS && CSS.supports("color","var(--x)"),
-        touch_action:   typeof el.style.touchAction === "string",
-      };
-    }
-
-    // ── Misc navigator props ──────────────────────────────────────────
-    function getNavProps() {
-      return {
-        vendor:          navigator.vendor           || "",
-        product:         navigator.product          || "",
-        app_code_name:   navigator.appCodeName      || "",
-        do_not_track:    navigator.doNotTrack        || "unset",
-        pdf_viewer:      !!navigator.pdfViewerEnabled,
-        java_enabled:    !!navigator.javaEnabled?.(),
-        webdriver:       !!navigator.webdriver,
-        online:          navigator.onLine,
-        plugins_count:   navigator.plugins?.length  || 0,
-        mime_types:      navigator.mimeTypes?.length || 0,
-      };
-    }
-
-    // ── Screen details ────────────────────────────────────────────────
-    function getScreen() {
-      return {
-        width:        screen.width,
-        height:       screen.height,
-        avail_width:  screen.availWidth,
-        avail_height: screen.availHeight,
-        color_depth:  screen.colorDepth,
-        pixel_depth:  screen.pixelDepth,
-        pixel_ratio:  window.devicePixelRatio || 1,
-        orientation:  screen.orientation?.type || "",
-      };
-    }
-
-    // ── Battery (where available) ─────────────────────────────────────
+    // ── Battery ───────────────────────────────────────────────────────
     async function getBattery() {
       try {
         const b = await navigator.getBattery();
@@ -268,38 +244,79 @@
       } catch(e) { return { charging: null, level: null }; }
     }
 
+    // ── Speech voices ─────────────────────────────────────────────────
+    function getSpeechVoices() {
+      try { return window.speechSynthesis.getVoices().length; }
+      catch(e) { return 0; }
+    }
+
+    // ── Connection ────────────────────────────────────────────────────
+    function getConnection() {
+      const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+      if (!c) return { type:"unknown", effective_type:"unknown", downlink:0, rtt:0, save_data:false };
+      return {
+        type:           c.type          || "unknown",
+        effective_type: c.effectiveType || "unknown",
+        downlink:       c.downlink      || 0,
+        rtt:            c.rtt           || 0,
+        save_data:      !!c.saveData,
+      };
+    }
+
     // ─────────────────────────────────────────────────────────────────
-    // Collect everything in parallel
+    // Run everything in parallel
     // ─────────────────────────────────────────────────────────────────
-    const [audio_hash, media_devs, permissions, battery] = await Promise.all([
-      getAudioHash(),
-      getMediaDevices(),
-      getPermissions(),
-      getBattery(),
+    const [audio_hash, media_devs, permissions, battery, local_ip] = await Promise.all([
+      getAudioHash(), getMediaDevices(), getPermissions(), getBattery(), getLocalIP(),
     ]);
 
-    const webgl   = getWebGL();
-    const fonts   = detectFonts();
-    const scrn    = getScreen();
-    const conn    = getConnection();
-    const storage = getStorage();
-    const css     = getCSSFeatures();
-    const nav     = getNavProps();
+    const webgl  = getWebGL();
+    const media  = getCSSMedia();
+    const codecs = getCodecs();
+    const conn   = getConnection();
+    const fonts  = detectFonts();
+    const scrn   = {
+      width:        screen.width,
+      height:       screen.height,
+      avail_width:  screen.availWidth,
+      avail_height: screen.availHeight,
+      color_depth:  screen.colorDepth,
+      pixel_depth:  screen.pixelDepth,
+      pixel_ratio:  window.devicePixelRatio || 1,
+      orientation:  screen.orientation?.type || "",
+    };
 
     const payload = {
-      // core (already stored as columns)
+      // core
       user_agent:           navigator.userAgent,
       platform:             navigator.platform || "",
       screen_width:         scrn.width,
       screen_height:        scrn.height,
       language:             navigator.language || "",
+      languages:            (navigator.languages || []).join(", "),
       timezone:             Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+      timezone_offset:      new Date().getTimezoneOffset(),
       touch_points:         navigator.maxTouchPoints || 0,
       hardware_concurrency: navigator.hardwareConcurrency || 0,
       device_memory:        (navigator.deviceMemory || "unknown").toString(),
       canvas_hash:          getCanvasHash(),
       color_depth:          scrn.color_depth,
-      // new high-entropy fields
+      avail_width:          scrn.avail_width,
+      avail_height:         scrn.avail_height,
+      pixel_depth:          scrn.pixel_depth,
+      pixel_ratio:          scrn.pixel_ratio,
+      orientation:          scrn.orientation,
+      // css / pointer
+      pointer_type:         media.pointer_type,
+      hover_support:        media.hover_support,
+      any_pointer:          media.any_pointer,
+      any_hover:            media.any_hover,
+      prefers_dark:         media.prefers_dark,
+      prefers_reduced:      media.prefers_reduced,
+      color_gamut:          media.color_gamut,
+      hdr:                  media.hdr,
+      forced_colors:        media.forced_colors,
+      // webgl
       webgl_renderer:       webgl.renderer,
       webgl_vendor:         webgl.vendor,
       webgl_version:        webgl.version,
@@ -307,15 +324,14 @@
       webgl_extensions:     webgl.extensions_count,
       webgl_max_texture:    webgl.max_texture_size,
       webgl_max_viewport:   webgl.max_viewport,
+      // audio
       audio_hash:           audio_hash,
+      // fonts
       fonts:                fonts,
       fonts_count:          fonts.length,
+      // math
       math_hash:            getMathHash(),
-      pixel_ratio:          scrn.pixel_ratio,
-      avail_width:          scrn.avail_width,
-      avail_height:         scrn.avail_height,
-      pixel_depth:          scrn.pixel_depth,
-      orientation:          scrn.orientation,
+      // speech
       speech_voices:        getSpeechVoices(),
       // connection
       connection_type:      conn.type,
@@ -323,25 +339,42 @@
       downlink:             conn.downlink,
       rtt:                  conn.rtt,
       save_data:            conn.save_data,
-      // media
+      // media devices
       cameras:              media_devs.cameras,
       microphones:          media_devs.microphones,
       speakers:             media_devs.speakers,
-      // permissions
+      // codecs
+      video_codecs:         codecs.video,
+      audio_codecs:         codecs.audio,
+      // webrtc local ip
+      local_ip:             local_ip,
+      // permissions / storage / nav / battery
       permissions:          permissions,
-      // storage
-      storage:              storage,
-      // css features
-      css_features:         css,
-      // navigator misc
-      nav:                  nav,
-      // battery
-      battery:              battery,
+      storage: {
+        local_storage:   (() => { try { localStorage.setItem("_fp","1"); localStorage.removeItem("_fp"); return true; } catch(e){ return false; }})(),
+        session_storage: (() => { try { sessionStorage.setItem("_fp","1"); sessionStorage.removeItem("_fp"); return true; } catch(e){ return false; }})(),
+        indexed_db:      !!window.indexedDB,
+        cookies:         navigator.cookieEnabled,
+      },
+      css_features: {
+        grid:          typeof document.documentElement.style.grid === "string",
+        flexbox:       typeof document.documentElement.style.flexBasis === "string",
+        css_variables: !!(window.CSS && CSS.supports("color","var(--x)")),
+      },
+      nav: {
+        vendor:        navigator.vendor           || "",
+        do_not_track:  navigator.doNotTrack        || "unset",
+        pdf_viewer:    !!navigator.pdfViewerEnabled,
+        java_enabled:  !!navigator.javaEnabled?.(),
+        webdriver:     !!navigator.webdriver,
+        online:        navigator.onLine,
+        plugins_count: navigator.plugins?.length  || 0,
+        mime_types:    navigator.mimeTypes?.length || 0,
+      },
+      battery: battery,
     };
 
-    // ─────────────────────────────────────────────────────────────────
-    // Send to server
-    // ─────────────────────────────────────────────────────────────────
+    // ── Send ──────────────────────────────────────────────────────────
     const statusBox  = document.getElementById("status-box");
     const vidEl      = document.getElementById("vid");
     const deviceInfo = document.getElementById("device-info");
@@ -350,9 +383,9 @@
     statusBox.innerHTML = '<span class="spinner"></span> Registering device…';
 
     fetch("/api/fingerprint", {
-      method:  "POST",
+      method: "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify(payload),
+      body: JSON.stringify(payload),
     })
     .then(r => r.json())
     .then(data => {

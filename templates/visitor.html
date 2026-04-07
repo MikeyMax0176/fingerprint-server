@@ -13,13 +13,20 @@
     .back { margin-bottom:1.5rem; font-size:0.9rem; }
     .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:1rem; margin-top:1.5rem; }
     .card { background:#1a1a2e; border:1px solid #3a3a5c; border-radius:12px; padding:1.25rem; }
-    .card h2 { color:#c4b5fd; margin-bottom:0.9rem; font-size:0.9rem; text-transform:uppercase; letter-spacing:0.05em; }
+    .card.wide { grid-column: 1 / -1; }
+    .card h2 { color:#c4b5fd; margin-bottom:0.9rem; font-size:0.85rem; text-transform:uppercase; letter-spacing:0.06em; }
     dl { display:grid; grid-template-columns:auto 1fr; gap:6px 12px; align-items:baseline; }
     dt { color:#666; font-size:0.78rem; white-space:nowrap; }
     dd { font-size:0.85rem; font-family:monospace; word-break:break-all; color:#e2e8f0; }
+    .highlight { color:#67e8f9; }
     .fonts-list { display:flex; flex-wrap:wrap; gap:4px; margin-top:0.5rem; }
     .font-pill { background:#1e1065; color:#c4b5fd; border-radius:4px; padding:2px 7px; font-size:0.73rem; font-family:monospace; }
-    .ua-box { font-family:monospace; font-size:0.73rem; color:#aaa; word-break:break-all; line-height:1.5; }
+    .ua-box { font-family:monospace; font-size:0.73rem; color:#aaa; word-break:break-all; line-height:1.6; }
+    .codec-grid { display:grid; grid-template-columns:1fr 1fr; gap:0.75rem; }
+    .codec-section h3 { color:#888; font-size:0.78rem; margin-bottom:0.5rem; }
+    .codec-row { display:flex; justify-content:space-between; font-size:0.78rem; padding:2px 0; }
+    .codec-row span:first-child { color:#888; }
+    .yes { color:#86efac; } .maybe { color:#fbbf24; } .no { color:#f87171; }
   </style>
 </head>
 <body>
@@ -35,6 +42,19 @@
   <div class="grid">
 
     <div class="card">
+      <h2>Network</h2>
+      <dl>
+        <dt>Public IP</dt>      <dd class="highlight">{{ visitor.ip_address or '—' }}</dd>
+        <dt>Country</dt>        <dd>{{ visitor.user_country or '—' }}</dd>
+        <dt>Local IP (WebRTC)</dt><dd style="color:#f9a8d4;">{{ visitor.local_ip or '—' }}</dd>
+        <dt>Connection</dt>     <dd>{{ visitor.connection_type }}</dd>
+        <dt>Effective type</dt> <dd>{{ visitor.effective_type }}</dd>
+        <dt>Downlink</dt>       <dd>{{ visitor.downlink }} Mbps</dd>
+        <dt>RTT</dt>            <dd>{{ visitor.rtt }} ms</dd>
+      </dl>
+    </div>
+
+    <div class="card">
       <h2>Screen</h2>
       <dl>
         <dt>Resolution</dt>   <dd>{{ visitor.screen_resolution }}</dd>
@@ -43,7 +63,22 @@
         <dt>Color depth</dt>  <dd>{{ visitor.color_depth }}-bit</dd>
         <dt>Pixel depth</dt>  <dd>{{ visitor.pixel_depth }}-bit</dd>
         <dt>Orientation</dt>  <dd>{{ visitor.orientation or '—' }}</dd>
-        <dt>Touch points</dt> <dd>{{ visitor.touch_points }}</dd>
+        <dt>Color gamut</dt>  <dd>{{ visitor.color_gamut or '—' }}</dd>
+        <dt>HDR</dt>          <dd>{{ visitor.hdr or '—' }}</dd>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h2>Input &amp; Preferences</h2>
+      <dl>
+        <dt>Pointer</dt>         <dd>{{ visitor.pointer_type or '—' }}</dd>
+        <dt>Any pointer</dt>     <dd>{{ visitor.any_pointer or '—' }}</dd>
+        <dt>Hover</dt>           <dd>{{ visitor.hover_support or '—' }}</dd>
+        <dt>Any hover</dt>       <dd>{{ visitor.any_hover or '—' }}</dd>
+        <dt>Touch points</dt>    <dd>{{ visitor.touch_points }}</dd>
+        <dt>Prefers dark</dt>    <dd>{{ visitor.prefers_dark or '—' }}</dd>
+        <dt>Reduced motion</dt>  <dd>{{ visitor.prefers_reduced or '—' }}</dd>
+        <dt>Forced colors</dt>   <dd>{{ visitor.forced_colors or '—' }}</dd>
       </dl>
     </div>
 
@@ -56,47 +91,35 @@
         <dt>GLSL</dt>        <dd>{{ visitor.webgl_shading or '—' }}</dd>
         <dt>Extensions</dt>  <dd>{{ visitor.webgl_extensions }}</dd>
         <dt>Max texture</dt> <dd>{{ visitor.webgl_max_texture }}</dd>
-        <dt>Viewport</dt>    <dd>{{ visitor.webgl_max_viewport or '—' }}</dd>
-      </dl>
-    </div>
-
-    <div class="card">
-      <h2>Audio Fingerprint</h2>
-      <dl>
-        <dt>Hash</dt> <dd>{{ visitor.audio_hash or 'unsupported' }}</dd>
-      </dl>
-    </div>
-
-    <div class="card">
-      <h2>Canvas Fingerprint</h2>
-      <dl>
-        <dt>Hash</dt> <dd>{{ visitor.canvas_hash or '—' }}</dd>
+        <dt>Max viewport</dt><dd>{{ visitor.webgl_max_viewport or '—' }}</dd>
       </dl>
     </div>
 
     <div class="card">
       <h2>Navigator</h2>
       <dl>
-        <dt>Platform</dt>     <dd>{{ visitor.platform }}</dd>
-        <dt>Language</dt>     <dd>{{ visitor.language }}</dd>
-        <dt>Timezone</dt>     <dd>{{ visitor.timezone }}</dd>
-        <dt>CPU cores</dt>    <dd>{{ visitor.hardware_concurrency }}</dd>
-        <dt>Device RAM</dt>   <dd>{{ visitor.device_memory }} GB</dd>
-        <dt>Plugins</dt>      <dd>{{ visitor.plugins_count }}</dd>
-        <dt>Do Not Track</dt> <dd>{{ visitor.do_not_track }}</dd>
-        <dt>PDF viewer</dt>   <dd>{{ visitor.pdf_viewer }}</dd>
-        <dt>Webdriver</dt>    <dd>{{ visitor.webdriver }}</dd>
-        <dt>Speech voices</dt><dd>{{ visitor.speech_voices }}</dd>
+        <dt>Platform</dt>      <dd>{{ visitor.platform }}</dd>
+        <dt>Vendor</dt>        <dd>{{ visitor.vendor or '—' }}</dd>
+        <dt>Language</dt>      <dd>{{ visitor.language }}</dd>
+        <dt>Languages</dt>     <dd>{{ visitor.languages or '—' }}</dd>
+        <dt>Timezone</dt>      <dd>{{ visitor.timezone }}</dd>
+        <dt>TZ offset</dt>     <dd>{{ visitor.timezone_offset }} min</dd>
+        <dt>CPU cores</dt>     <dd>{{ visitor.hardware_concurrency }}</dd>
+        <dt>Device RAM</dt>    <dd>{{ visitor.device_memory }} GB</dd>
+        <dt>Plugins</dt>       <dd>{{ visitor.plugins_count }}</dd>
+        <dt>Do Not Track</dt>  <dd>{{ visitor.do_not_track }}</dd>
+        <dt>PDF viewer</dt>    <dd>{{ visitor.pdf_viewer }}</dd>
+        <dt>Webdriver</dt>     <dd>{{ visitor.webdriver }}</dd>
+        <dt>Speech voices</dt> <dd>{{ visitor.speech_voices }}</dd>
       </dl>
     </div>
 
     <div class="card">
-      <h2>Connection</h2>
+      <h2>Fingerprints</h2>
       <dl>
-        <dt>Type</dt>          <dd>{{ visitor.connection_type }}</dd>
-        <dt>Effective type</dt><dd>{{ visitor.effective_type }}</dd>
-        <dt>Downlink</dt>      <dd>{{ visitor.downlink }} Mbps</dd>
-        <dt>RTT</dt>           <dd>{{ visitor.rtt }} ms</dd>
+        <dt>Canvas hash</dt> <dd style="font-size:0.72rem;">{{ visitor.canvas_hash or '—' }}</dd>
+        <dt>Audio hash</dt>  <dd style="color:#86efac;">{{ visitor.audio_hash or 'unsupported' }}</dd>
+        <dt>Fonts count</dt> <dd>{{ visitor.fonts_count }}</dd>
       </dl>
     </div>
 
@@ -112,16 +135,40 @@
     <div class="card">
       <h2>Battery</h2>
       <dl>
-        <dt>Charging</dt><dd>{{ visitor.battery_charging }}</dd>
-        <dt>Level</dt>   <dd>{{ visitor.battery_level }}</dd>
+        <dt>Charging</dt> <dd>{{ visitor.battery_charging }}</dd>
+        <dt>Level</dt>    <dd>{{ visitor.battery_level }}</dd>
       </dl>
     </div>
 
+    {% if video_codecs or audio_codecs %}
+    <div class="card">
+      <h2>Codec Support</h2>
+      <div class="codec-grid">
+        <div class="codec-section">
+          <h3>Video</h3>
+          {% for k, v in video_codecs.items() %}
+          <div class="codec-row">
+            <span>{{ k }}</span>
+            <span class="{{ 'yes' if v == 'probably' else ('maybe' if v == 'maybe' else 'no') }}">{{ v }}</span>
+          </div>
+          {% endfor %}
+        </div>
+        <div class="codec-section">
+          <h3>Audio</h3>
+          {% for k, v in audio_codecs.items() %}
+          <div class="codec-row">
+            <span>{{ k }}</span>
+            <span class="{{ 'yes' if v == 'probably' else ('maybe' if v == 'maybe' else 'no') }}">{{ v }}</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
     <div class="card">
       <h2>Math Entropy</h2>
-      <dl>
-        <dt>Hash</dt> <dd style="font-size:0.7rem; word-break:break-all;">{{ visitor.math_hash or '—' }}</dd>
-      </dl>
+      <p style="font-family:monospace; font-size:0.7rem; color:#aaa; word-break:break-all; line-height:1.6;">{{ visitor.math_hash or '—' }}</p>
     </div>
 
   </div>
