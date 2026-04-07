@@ -3,63 +3,142 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Visitor {{ visitor.visitor_id }} — Fingerprint Server</title>
+  <title>Visitor {{ visitor.visitor_id }}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #0f0f0f; color: #f0f0f0; padding: 2rem;
-    }
-    a { color: #818cf8; text-decoration: none; }
-    a:hover { text-decoration: underline; }
-    h1 { color: #a78bfa; margin-bottom: 0.25rem; }
-    .back { margin-bottom: 1.5rem; font-size: 0.9rem; }
-    .card {
-      background: #1a1a2e; border: 1px solid #3a3a5c;
-      border-radius: 12px; padding: 1.5rem; max-width: 600px;
-      margin-bottom: 1.5rem;
-    }
-    .card h2 { color: #c4b5fd; margin-bottom: 1rem; font-size: 1rem; }
-    dl { display: grid; grid-template-columns: 160px 1fr; gap: 8px 12px; }
-    dt { color: #888; font-size: 0.85rem; }
-    dd { font-size: 0.9rem; word-break: break-all; font-family: monospace; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:#0f0f0f; color:#f0f0f0; padding:2rem; }
+    a { color:#818cf8; text-decoration:none; }
+    a:hover { text-decoration:underline; }
+    h1 { color:#a78bfa; margin-bottom:0.25rem; }
+    .back { margin-bottom:1.5rem; font-size:0.9rem; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:1rem; margin-top:1.5rem; }
+    .card { background:#1a1a2e; border:1px solid #3a3a5c; border-radius:12px; padding:1.25rem; }
+    .card h2 { color:#c4b5fd; margin-bottom:0.9rem; font-size:0.9rem; text-transform:uppercase; letter-spacing:0.05em; }
+    dl { display:grid; grid-template-columns:auto 1fr; gap:6px 12px; align-items:baseline; }
+    dt { color:#666; font-size:0.78rem; white-space:nowrap; }
+    dd { font-size:0.85rem; font-family:monospace; word-break:break-all; color:#e2e8f0; }
+    .fonts-list { display:flex; flex-wrap:wrap; gap:4px; margin-top:0.5rem; }
+    .font-pill { background:#1e1065; color:#c4b5fd; border-radius:4px; padding:2px 7px; font-size:0.73rem; font-family:monospace; }
+    .ua-box { font-family:monospace; font-size:0.73rem; color:#aaa; word-break:break-all; line-height:1.5; }
   </style>
 </head>
 <body>
   <p class="back"><a href="/dashboard">← Back to Dashboard</a></p>
   <h1>{{ visitor.device_label }}</h1>
-  <p style="color:#888; margin-bottom:1.5rem; font-size:0.85rem;">
-    ID: <span style="font-family:monospace">{{ visitor.visitor_id }}</span>
+  <p style="color:#888; font-size:0.82rem; margin-top:4px;">
+    ID: <span style="font-family:monospace; color:#a78bfa;">{{ visitor.visitor_id }}</span>
+    &nbsp;·&nbsp; {{ visitor.visit_count }} visit{{ 's' if visitor.visit_count != 1 else '' }}
+    &nbsp;·&nbsp; First: {{ visitor.first_seen }}
+    &nbsp;·&nbsp; Last: {{ visitor.last_seen }}
   </p>
 
-  <div class="card">
-    <h2>Visit Stats</h2>
-    <dl>
-      <dt>Total visits</dt>  <dd>{{ visitor.visit_count }}</dd>
-      <dt>First seen</dt>    <dd>{{ visitor.first_seen }}</dd>
-      <dt>Last seen</dt>     <dd>{{ visitor.last_seen }}</dd>
-    </dl>
+  <div class="grid">
+
+    <div class="card">
+      <h2>Screen</h2>
+      <dl>
+        <dt>Resolution</dt>   <dd>{{ visitor.screen_resolution }}</dd>
+        <dt>Available</dt>    <dd>{{ visitor.avail_resolution }}</dd>
+        <dt>Pixel ratio</dt>  <dd>{{ visitor.pixel_ratio }}×</dd>
+        <dt>Color depth</dt>  <dd>{{ visitor.color_depth }}-bit</dd>
+        <dt>Pixel depth</dt>  <dd>{{ visitor.pixel_depth }}-bit</dd>
+        <dt>Orientation</dt>  <dd>{{ visitor.orientation or '—' }}</dd>
+        <dt>Touch points</dt> <dd>{{ visitor.touch_points }}</dd>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h2>WebGL / GPU</h2>
+      <dl>
+        <dt>Renderer</dt>    <dd>{{ visitor.webgl_renderer or '—' }}</dd>
+        <dt>Vendor</dt>      <dd>{{ visitor.webgl_vendor or '—' }}</dd>
+        <dt>GL version</dt>  <dd>{{ visitor.webgl_version or '—' }}</dd>
+        <dt>GLSL</dt>        <dd>{{ visitor.webgl_shading or '—' }}</dd>
+        <dt>Extensions</dt>  <dd>{{ visitor.webgl_extensions }}</dd>
+        <dt>Max texture</dt> <dd>{{ visitor.webgl_max_texture }}</dd>
+        <dt>Viewport</dt>    <dd>{{ visitor.webgl_max_viewport or '—' }}</dd>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h2>Audio Fingerprint</h2>
+      <dl>
+        <dt>Hash</dt> <dd>{{ visitor.audio_hash or 'unsupported' }}</dd>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h2>Canvas Fingerprint</h2>
+      <dl>
+        <dt>Hash</dt> <dd>{{ visitor.canvas_hash or '—' }}</dd>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h2>Navigator</h2>
+      <dl>
+        <dt>Platform</dt>     <dd>{{ visitor.platform }}</dd>
+        <dt>Language</dt>     <dd>{{ visitor.language }}</dd>
+        <dt>Timezone</dt>     <dd>{{ visitor.timezone }}</dd>
+        <dt>CPU cores</dt>    <dd>{{ visitor.hardware_concurrency }}</dd>
+        <dt>Device RAM</dt>   <dd>{{ visitor.device_memory }} GB</dd>
+        <dt>Plugins</dt>      <dd>{{ visitor.plugins_count }}</dd>
+        <dt>Do Not Track</dt> <dd>{{ visitor.do_not_track }}</dd>
+        <dt>PDF viewer</dt>   <dd>{{ visitor.pdf_viewer }}</dd>
+        <dt>Webdriver</dt>    <dd>{{ visitor.webdriver }}</dd>
+        <dt>Speech voices</dt><dd>{{ visitor.speech_voices }}</dd>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h2>Connection</h2>
+      <dl>
+        <dt>Type</dt>          <dd>{{ visitor.connection_type }}</dd>
+        <dt>Effective type</dt><dd>{{ visitor.effective_type }}</dd>
+        <dt>Downlink</dt>      <dd>{{ visitor.downlink }} Mbps</dd>
+        <dt>RTT</dt>           <dd>{{ visitor.rtt }} ms</dd>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h2>Media Devices</h2>
+      <dl>
+        <dt>Cameras</dt>     <dd>{{ visitor.cameras }}</dd>
+        <dt>Microphones</dt> <dd>{{ visitor.microphones }}</dd>
+        <dt>Speakers</dt>    <dd>{{ visitor.speakers }}</dd>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h2>Battery</h2>
+      <dl>
+        <dt>Charging</dt><dd>{{ visitor.battery_charging }}</dd>
+        <dt>Level</dt>   <dd>{{ visitor.battery_level }}</dd>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h2>Math Entropy</h2>
+      <dl>
+        <dt>Hash</dt> <dd style="font-size:0.7rem; word-break:break-all;">{{ visitor.math_hash or '—' }}</dd>
+      </dl>
+    </div>
+
   </div>
 
-  <div class="card">
-    <h2>Device Attributes</h2>
-    <dl>
-      <dt>Platform</dt>      <dd>{{ visitor.platform }}</dd>
-      <dt>Screen</dt>        <dd>{{ visitor.screen_resolution }}</dd>
-      <dt>Language</dt>      <dd>{{ visitor.language }}</dd>
-      <dt>Timezone</dt>      <dd>{{ visitor.timezone }}</dd>
-      <dt>Touch points</dt>  <dd>{{ visitor.touch_points }}</dd>
-      <dt>CPU cores</dt>     <dd>{{ visitor.hardware_concurrency }}</dd>
-      <dt>Device memory</dt> <dd>{{ visitor.device_memory }} GB</dd>
-      <dt>Canvas hash</dt>   <dd>{{ visitor.canvas_hash }}</dd>
-    </dl>
+  {% if fonts %}
+  <div class="card" style="margin-top:1rem;">
+    <h2>Detected Fonts ({{ fonts | length }})</h2>
+    <div class="fonts-list">
+      {% for f in fonts %}<span class="font-pill">{{ f }}</span>{% endfor %}
+    </div>
   </div>
+  {% endif %}
 
-  <div class="card">
+  <div class="card" style="margin-top:1rem;">
     <h2>User Agent</h2>
-    <p style="font-family:monospace; font-size:0.78rem; color:#aaa; word-break:break-all;">
-      {{ visitor.user_agent }}
-    </p>
+    <p class="ua-box">{{ visitor.user_agent }}</p>
   </div>
+
 </body>
 </html>

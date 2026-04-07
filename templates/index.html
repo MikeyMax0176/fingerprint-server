@@ -37,16 +37,10 @@
       margin-top: 1.5rem;
       display: none;
     }
-    .status.new      { background: #14532d; border: 1px solid #22c55e; color: #86efac; }
+    .status.new       { background: #14532d; border: 1px solid #22c55e; color: #86efac; }
     .status.returning { background: #1e3a5f; border: 1px solid #3b82f6; color: #93c5fd; }
-    .status.error    { background: #3b1515; border: 1px solid #ef4444; color: #fca5a5; }
-    .visitor-id {
-      font-family: monospace;
-      font-size: 0.8rem;
-      color: #666;
-      margin-top: 1rem;
-      word-break: break-all;
-    }
+    .status.error     { background: #3b1515; border: 1px solid #ef4444; color: #fca5a5; }
+    .visitor-id { font-family: monospace; font-size: 0.8rem; color: #666; margin-top: 1rem; word-break: break-all; }
     .spinner {
       display: inline-block;
       width: 1.2rem; height: 1.2rem;
@@ -66,51 +60,288 @@
     <div class="icon">📲</div>
     <h1>{{ demo_subtitle }}</h1>
     <p class="subtitle">Tap detected — scanning your device…</p>
-
     <div id="status-box" class="status"></div>
     <p class="visitor-id" id="vid"></p>
     <p class="device-info" id="device-info"></p>
   </div>
 
   <script>
-    // ----------------------------------------------------------------
-    // 1. Collect browser/device attributes
-    // ----------------------------------------------------------------
+  (async () => {
+
+    // ── Canvas fingerprint ─────────────────────────────────────────────
     function getCanvasHash() {
       try {
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
-        ctx.textBaseline = "top";
-        ctx.font = "14px Arial";
+        const c = document.createElement("canvas");
+        const ctx = c.getContext("2d");
+        c.width = 280; c.height = 60;
+        ctx.textBaseline = "alphabetic";
         ctx.fillStyle = "#f60";
         ctx.fillRect(125, 1, 62, 20);
         ctx.fillStyle = "#069";
-        ctx.fillText("fingerprint", 2, 15);
+        ctx.font = "15px Arial";
+        ctx.fillText("fingerprint \ud83c\udf42", 2, 15);
         ctx.fillStyle = "rgba(102,204,0,0.7)";
-        ctx.fillText("fingerprint", 4, 17);
-        return canvas.toDataURL().slice(-50);   // last 50 chars are unique enough
-      } catch (e) {
-        return "unsupported";
-      }
+        ctx.font = "16px Georgia";
+        ctx.fillText("fingerprint \ud83c\udf42", 4, 45);
+        return c.toDataURL().slice(-80);
+      } catch(e) { return "unsupported"; }
     }
 
+    // ── WebGL fingerprint ──────────────────────────────────────────────
+    function getWebGL() {
+      try {
+        const c = document.createElement("canvas");
+        const gl = c.getContext("webgl") || c.getContext("experimental-webgl");
+        if (!gl) return { renderer:"unsupported", vendor:"unsupported", version:"", shading:"", extensions_count:0 };
+        const ext = gl.getExtension("WEBGL_debug_renderer_info");
+        const exts = gl.getSupportedExtensions() || [];
+        return {
+          renderer:         ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : "masked",
+          vendor:           ext ? gl.getParameter(ext.UNMASKED_VENDOR_WEBGL)   : "masked",
+          version:          gl.getParameter(gl.VERSION),
+          shading:          gl.getParameter(gl.SHADING_LANGUAGE_VERSION),
+          extensions_count: exts.length,
+          max_texture_size: gl.getParameter(gl.MAX_TEXTURE_SIZE),
+          max_viewport:     gl.getParameter(gl.MAX_VIEWPORT_DIMS)?.join("x") || "",
+        };
+      } catch(e) { return { renderer:"error", vendor:"error", version:"", shading:"", extensions_count:0 }; }
+    }
+
+    // ── Audio fingerprint ──────────────────────────────────────────────
+    async function getAudioHash() {
+      try {
+        const ctx = new OfflineAudioContext(1, 44100, 44100);
+        const osc = ctx.createOscillator();
+        const cmp = ctx.createDynamicsCompressor();
+        osc.type = "triangle";
+        osc.frequency.setValueAtTime(10000, ctx.currentTime);
+        cmp.threshold.setValueAtTime(-50, ctx.currentTime);
+        cmp.knee.setValueAtTime(40, ctx.currentTime);
+        cmp.ratio.setValueAtTime(12, ctx.currentTime);
+        cmp.attack.setValueAtTime(0, ctx.currentTime);
+        cmp.release.setValueAtTime(0.25, ctx.currentTime);
+        osc.connect(cmp);
+        cmp.connect(ctx.destination);
+        osc.start(0);
+        osc.stop(0.1);
+        const buf = await ctx.startRendering();
+        const data = buf.getChannelData(0);
+        let sum = 0;
+        for (let i = 4500; i < 5000; i++) sum += Math.abs(data[i]);
+        return sum.toFixed(10);
+      } catch(e) { return "unsupported"; }
+    }
+
+    // ── Font detection (canvas-based) ─────────────────────────────────
+    function detectFonts() {
+      const testFonts = [
+        "Arial","Arial Black","Calibri","Cambria","Comic Sans MS","Consolas",
+        "Courier New","Franklin Gothic Medium","Futura","Garamond","Geneva",
+        "Georgia","Gill Sans","Helvetica","Impact","Lucida Console",
+        "Lucida Sans Unicode","Microsoft Sans Serif","Monaco","Optima",
+        "Palatino","Roboto","Segoe UI","SF Pro Display","Tahoma",
+        "Times New Roman","Trebuchet MS","Verdana","Wingdings",
+      ];
+      const c = document.createElement("canvas");
+      const ctx = c.getContext("2d");
+      const sample = "mmmmwwwwiii XYZABC 0123456789";
+      const base = "monospace";
+      ctx.font = `16px ${base}`;
+      const baseW = ctx.measureText(sample).width;
+      return testFonts.filter(f => {
+        ctx.font = `16px '${f}', ${base}`;
+        return ctx.measureText(sample).width !== baseW;
+      });
+    }
+
+    // ── Math entropy ──────────────────────────────────────────────────
+    function getMathHash() {
+      return [
+        Math.tan(-1e300), Math.sqrt(2), Math.sin(1e-300),
+        Math.cos(0.1), Math.atan2(1e300, 1), 1 / Math.PI,
+        Math.log(Math.PI), Math.exp(1), Math.pow(2, -52),
+      ].map(v => v.toString().slice(0, 12)).join("|");
+    }
+
+    // ── Media devices (count only, no permission needed) ──────────────
+    async function getMediaDevices() {
+      try {
+        const devs = await navigator.mediaDevices.enumerateDevices();
+        return {
+          cameras:      devs.filter(d => d.kind === "videoinput").length,
+          microphones:  devs.filter(d => d.kind === "audioinput").length,
+          speakers:     devs.filter(d => d.kind === "audiooutput").length,
+        };
+      } catch(e) { return { cameras:0, microphones:0, speakers:0 }; }
+    }
+
+    // ── Speech synthesis voices ───────────────────────────────────────
+    function getSpeechVoices() {
+      try {
+        const voices = window.speechSynthesis.getVoices();
+        return voices.length;
+      } catch(e) { return 0; }
+    }
+
+    // ── Connection info ───────────────────────────────────────────────
+    function getConnection() {
+      const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+      if (!c) return { type:"unknown", effective_type:"unknown", downlink:0, rtt:0 };
+      return {
+        type:           c.type           || "unknown",
+        effective_type: c.effectiveType  || "unknown",
+        downlink:       c.downlink       || 0,
+        rtt:            c.rtt            || 0,
+        save_data:      c.saveData       || false,
+      };
+    }
+
+    // ── Permissions probe ─────────────────────────────────────────────
+    async function getPermissions() {
+      const names = ["notifications", "geolocation", "camera", "microphone", "clipboard-read"];
+      const results = {};
+      for (const name of names) {
+        try {
+          const r = await navigator.permissions.query({ name });
+          results[name] = r.state;
+        } catch(e) { results[name] = "unknown"; }
+      }
+      return results;
+    }
+
+    // ── Storage availability ──────────────────────────────────────────
+    function getStorage() {
+      return {
+        local_storage:   (() => { try { localStorage.setItem("_fp","1"); localStorage.removeItem("_fp"); return true; } catch(e){ return false; }})(),
+        session_storage: (() => { try { sessionStorage.setItem("_fp","1"); sessionStorage.removeItem("_fp"); return true; } catch(e){ return false; }})(),
+        indexed_db:      !!window.indexedDB,
+        cookies:         navigator.cookieEnabled,
+      };
+    }
+
+    // ── CSS feature detection ─────────────────────────────────────────
+    function getCSSFeatures() {
+      const el = document.documentElement;
+      return {
+        grid:           typeof el.style.grid === "string",
+        flexbox:        typeof el.style.flexBasis === "string",
+        css_variables:  window.CSS && CSS.supports("color","var(--x)"),
+        touch_action:   typeof el.style.touchAction === "string",
+      };
+    }
+
+    // ── Misc navigator props ──────────────────────────────────────────
+    function getNavProps() {
+      return {
+        vendor:          navigator.vendor           || "",
+        product:         navigator.product          || "",
+        app_code_name:   navigator.appCodeName      || "",
+        do_not_track:    navigator.doNotTrack        || "unset",
+        pdf_viewer:      !!navigator.pdfViewerEnabled,
+        java_enabled:    !!navigator.javaEnabled?.(),
+        webdriver:       !!navigator.webdriver,
+        online:          navigator.onLine,
+        plugins_count:   navigator.plugins?.length  || 0,
+        mime_types:      navigator.mimeTypes?.length || 0,
+      };
+    }
+
+    // ── Screen details ────────────────────────────────────────────────
+    function getScreen() {
+      return {
+        width:        screen.width,
+        height:       screen.height,
+        avail_width:  screen.availWidth,
+        avail_height: screen.availHeight,
+        color_depth:  screen.colorDepth,
+        pixel_depth:  screen.pixelDepth,
+        pixel_ratio:  window.devicePixelRatio || 1,
+        orientation:  screen.orientation?.type || "",
+      };
+    }
+
+    // ── Battery (where available) ─────────────────────────────────────
+    async function getBattery() {
+      try {
+        const b = await navigator.getBattery();
+        return { charging: b.charging, level: b.level };
+      } catch(e) { return { charging: null, level: null }; }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Collect everything in parallel
+    // ─────────────────────────────────────────────────────────────────
+    const [audio_hash, media_devs, permissions, battery] = await Promise.all([
+      getAudioHash(),
+      getMediaDevices(),
+      getPermissions(),
+      getBattery(),
+    ]);
+
+    const webgl   = getWebGL();
+    const fonts   = detectFonts();
+    const scrn    = getScreen();
+    const conn    = getConnection();
+    const storage = getStorage();
+    const css     = getCSSFeatures();
+    const nav     = getNavProps();
+
     const payload = {
+      // core (already stored as columns)
       user_agent:           navigator.userAgent,
       platform:             navigator.platform || "",
-      screen_width:         screen.width,
-      screen_height:        screen.height,
+      screen_width:         scrn.width,
+      screen_height:        scrn.height,
       language:             navigator.language || "",
       timezone:             Intl.DateTimeFormat().resolvedOptions().timeZone || "",
       touch_points:         navigator.maxTouchPoints || 0,
       hardware_concurrency: navigator.hardwareConcurrency || 0,
       device_memory:        (navigator.deviceMemory || "unknown").toString(),
       canvas_hash:          getCanvasHash(),
-      color_depth:          screen.colorDepth || 0,
+      color_depth:          scrn.color_depth,
+      // new high-entropy fields
+      webgl_renderer:       webgl.renderer,
+      webgl_vendor:         webgl.vendor,
+      webgl_version:        webgl.version,
+      webgl_shading:        webgl.shading,
+      webgl_extensions:     webgl.extensions_count,
+      webgl_max_texture:    webgl.max_texture_size,
+      webgl_max_viewport:   webgl.max_viewport,
+      audio_hash:           audio_hash,
+      fonts:                fonts,
+      fonts_count:          fonts.length,
+      math_hash:            getMathHash(),
+      pixel_ratio:          scrn.pixel_ratio,
+      avail_width:          scrn.avail_width,
+      avail_height:         scrn.avail_height,
+      pixel_depth:          scrn.pixel_depth,
+      orientation:          scrn.orientation,
+      speech_voices:        getSpeechVoices(),
+      // connection
+      connection_type:      conn.type,
+      effective_type:       conn.effective_type,
+      downlink:             conn.downlink,
+      rtt:                  conn.rtt,
+      save_data:            conn.save_data,
+      // media
+      cameras:              media_devs.cameras,
+      microphones:          media_devs.microphones,
+      speakers:             media_devs.speakers,
+      // permissions
+      permissions:          permissions,
+      // storage
+      storage:              storage,
+      // css features
+      css_features:         css,
+      // navigator misc
+      nav:                  nav,
+      // battery
+      battery:              battery,
     };
 
-    // ----------------------------------------------------------------
-    // 2. Send to server
-    // ----------------------------------------------------------------
+    // ─────────────────────────────────────────────────────────────────
+    // Send to server
+    // ─────────────────────────────────────────────────────────────────
     const statusBox  = document.getElementById("status-box");
     const vidEl      = document.getElementById("vid");
     const deviceInfo = document.getElementById("device-info");
@@ -126,21 +357,22 @@
     .then(r => r.json())
     .then(data => {
       if (data.status === "new") {
-        statusBox.className = "status new";
+        statusBox.className   = "status new";
         statusBox.textContent = "✅ New device registered! Welcome.";
       } else {
-        statusBox.className = "status returning";
-        statusBox.textContent =
-          `👋 Welcome back! This is visit #${data.visit_count} for this device.`;
+        statusBox.className   = "status returning";
+        statusBox.textContent = `👋 Welcome back! This is visit #${data.visit_count} for this device.`;
       }
       vidEl.textContent      = "Device ID: " + data.visitor_id;
       deviceInfo.textContent = "Detected as: " + data.device_label;
     })
     .catch(() => {
-      statusBox.className   = "status error";
-      statusBox.textContent = "⚠️ Could not reach the server. Try again.";
+      statusBox.className     = "status error";
+      statusBox.textContent   = "⚠️ Could not reach the server. Try again.";
       statusBox.style.display = "block";
     });
+
+  })();
   </script>
 </body>
 </html>
