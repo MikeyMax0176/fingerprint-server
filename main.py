@@ -2,13 +2,14 @@
 Fingerprint Server — FastAPI backend
 """
 import hashlib
+import httpx
 import json
 import os
 import secrets
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, Depends, Request, HTTPException, status
+from fastapi import BackgroundTasks, FastAPI, Depends, Request, HTTPException, status
 from fastapi.responses import HTMLResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
@@ -26,8 +27,30 @@ create_tables()
 # Dashboard auth — set DASHBOARD_USER and DASHBOARD_PASS in Railway settings
 # Defaults to admin / changeme if not set (change these in Railway!)
 # ---------------------------------------------------------------------------
-DASHBOARD_USER = os.environ.get("DASHBOARD_USER", "admin")
-DASHBOARD_PASS = os.environ.get("DASHBOARD_PASS", "changeme")
+DASHBOARD_USER   = os.environ.get("DASHBOARD_USER", "admin")
+DASHBOARD_PASS   = os.environ.get("DASHBOARD_PASS", "changeme")
+
+# ---------------------------------------------------------------------------
+# Telegram — set TELEGRAM_TOKEN and TELEGRAM_CHAT_ID in Railway variables
+# ---------------------------------------------------------------------------
+TELEGRAM_TOKEN   = os.environ.get("TELEGRAM_TOKEN", "")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+
+
+async def send_telegram(message: str):
+    """Send a message to Telegram. Runs in the background — won't slow the response."""
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+        return
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+        async with httpx.AsyncClient(timeout=5) as client:
+            await client.post(url, json={
+                "chat_id": TELEGRAM_CHAT_ID,
+                "text": message,
+                "parse_mode": "HTML",
+            })
+    except Exception:
+        pass  # Never let a notification failure crash the main request
 
 
 def require_auth(credentials: HTTPBasicCredentials = Depends(security)):
@@ -179,6 +202,7 @@ async def landing(request: Request):
 async def receive_fingerprint(
     payload: FingerprintPayload,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
     visitor_id  = make_visitor_id(payload)
@@ -265,6 +289,23 @@ async def receive_fingerprint(
     )
     db.add(new_visitor)
     db.commit()
+
+    # ── Telegram alert for new visitors ──────────────────────────────
+    msg = (
+        f"📲 <b>New NFC Tap!</b>\n\n"
+        f"🔑 <b>ID:</b> <code>{visitor_id}</code>\n"
+        f"📱 <b>Device:</b> {device_label}\n"
+        f"🌐 <b>IP:</b> <code>{ip_address}</code>"
+        + (f" ({country})" if country else "") + "\n"
+        f"🖥 <b>GPU:</b> {payload.webgl_renderer or '—'}\n"
+        f"📐 <b>Screen:</b> {payload.screen_width}×{payload.screen_height} @{payload.pixel_ratio}×\n"
+        f"🔊 <b>Audio hash:</b> <code>{(payload.audio_hash or '—')[:14]}</code>\n"
+        f"🔤 <b>Fonts:</b> {payload.fonts_count}\n"
+        f"🕐 <b>Timezone:</b> {payload.timezone}\n"
+        + (f"📡 <b>Local IP:</b> <code>{payload.local_ip}</code>\n" if payload.local_ip else "")
+    )
+    background_tasks.add_task(send_telegram, msg)
+
     return {
         "visitor_id":   visitor_id,
         "status":       "new",
