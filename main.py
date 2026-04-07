@@ -3,11 +3,14 @@ Fingerprint Server — FastAPI backend
 """
 import hashlib
 import json
+import os
+import secrets
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, Depends, Request
+from fastapi import FastAPI, Depends, Request, HTTPException, status
 from fastapi.responses import HTMLResponse
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -16,7 +19,27 @@ from database import create_tables, get_db, Visitor
 
 app = FastAPI(title="Fingerprint Server")
 templates = Jinja2Templates(directory="templates")
+security = HTTPBasic()
 create_tables()
+
+# ---------------------------------------------------------------------------
+# Dashboard auth — set DASHBOARD_USER and DASHBOARD_PASS in Railway settings
+# Defaults to admin / changeme if not set (change these in Railway!)
+# ---------------------------------------------------------------------------
+DASHBOARD_USER = os.environ.get("DASHBOARD_USER", "admin")
+DASHBOARD_PASS = os.environ.get("DASHBOARD_PASS", "changeme")
+
+
+def require_auth(credentials: HTTPBasicCredentials = Depends(security)):
+    """Protect any route with HTTP Basic Auth."""
+    user_ok = secrets.compare_digest(credentials.username.encode(), DASHBOARD_USER.encode())
+    pass_ok = secrets.compare_digest(credentials.password.encode(), DASHBOARD_PASS.encode())
+    if not (user_ok and pass_ok):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Basic"},
+        )
 
 WELCOME_MESSAGE = "Welcome! Your device has been registered."
 DEMO_SUBTITLE   = "NFC Fingerprint Demo"
@@ -251,7 +274,7 @@ async def receive_fingerprint(
 
 
 @app.get("/dashboard", response_class=HTMLResponse)
-async def dashboard(request: Request, db: Session = Depends(get_db)):
+async def dashboard(request: Request, db: Session = Depends(get_db), _=Depends(require_auth)):
     visitors = db.query(Visitor).order_by(Visitor.last_seen.desc()).all()
     return templates.TemplateResponse("dashboard.html", {
         "request":  request,
@@ -261,7 +284,7 @@ async def dashboard(request: Request, db: Session = Depends(get_db)):
 
 
 @app.get("/visitor/{visitor_id}", response_class=HTMLResponse)
-async def visitor_detail(visitor_id: str, request: Request, db: Session = Depends(get_db)):
+async def visitor_detail(visitor_id: str, request: Request, db: Session = Depends(get_db), _=Depends(require_auth)):
     visitor = db.query(Visitor).filter(Visitor.visitor_id == visitor_id).first()
     if not visitor:
         return HTMLResponse("<h2>Visitor not found</h2>", status_code=404)

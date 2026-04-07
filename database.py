@@ -1,15 +1,24 @@
 """
-SQLite database setup using SQLAlchemy.
-All visitor fingerprints are stored in fingerprints.db in this directory.
+Database setup using SQLAlchemy.
+- On Railway: uses PostgreSQL (DATABASE_URL env var set automatically)
+- Locally:    falls back to SQLite (fingerprints.db)
 """
+import os
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, Float, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 
-DATABASE_URL = "sqlite:///./fingerprints.db"
+DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./fingerprints.db")
 
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+# Railway gives a postgres:// URL; SQLAlchemy needs postgresql://
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+if DATABASE_URL.startswith("sqlite"):
+    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+else:
+    engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
