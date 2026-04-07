@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ demo_subtitle }}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f0f0f;
+      color: #f0f0f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      text-align: center;
+    }
+    .card {
+      background: #1a1a2e;
+      border: 1px solid #3a3a5c;
+      border-radius: 16px;
+      padding: 2.5rem 2rem;
+      max-width: 420px;
+      width: 100%;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+    .icon { font-size: 3rem; margin-bottom: 1rem; }
+    h1 { font-size: 1.5rem; margin-bottom: 0.5rem; color: #a78bfa; }
+    .subtitle { color: #888; font-size: 0.9rem; margin-bottom: 1.5rem; }
+    .status {
+      padding: 1rem;
+      border-radius: 10px;
+      font-size: 1rem;
+      margin-top: 1.5rem;
+      display: none;
+    }
+    .status.new      { background: #14532d; border: 1px solid #22c55e; color: #86efac; }
+    .status.returning { background: #1e3a5f; border: 1px solid #3b82f6; color: #93c5fd; }
+    .status.error    { background: #3b1515; border: 1px solid #ef4444; color: #fca5a5; }
+    .visitor-id {
+      font-family: monospace;
+      font-size: 0.8rem;
+      color: #666;
+      margin-top: 1rem;
+      word-break: break-all;
+    }
+    .spinner {
+      display: inline-block;
+      width: 1.2rem; height: 1.2rem;
+      border: 3px solid #555;
+      border-top-color: #a78bfa;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      vertical-align: middle;
+      margin-right: 0.4rem;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .device-info { margin-top: 1rem; font-size: 0.85rem; color: #aaa; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">📲</div>
+    <h1>{{ demo_subtitle }}</h1>
+    <p class="subtitle">Tap detected — scanning your device…</p>
+
+    <div id="status-box" class="status"></div>
+    <p class="visitor-id" id="vid"></p>
+    <p class="device-info" id="device-info"></p>
+  </div>
+
+  <script>
+    // ----------------------------------------------------------------
+    // 1. Collect browser/device attributes
+    // ----------------------------------------------------------------
+    function getCanvasHash() {
+      try {
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        ctx.textBaseline = "top";
+        ctx.font = "14px Arial";
+        ctx.fillStyle = "#f60";
+        ctx.fillRect(125, 1, 62, 20);
+        ctx.fillStyle = "#069";
+        ctx.fillText("fingerprint", 2, 15);
+        ctx.fillStyle = "rgba(102,204,0,0.7)";
+        ctx.fillText("fingerprint", 4, 17);
+        return canvas.toDataURL().slice(-50);   // last 50 chars are unique enough
+      } catch (e) {
+        return "unsupported";
+      }
+    }
+
+    const payload = {
+      user_agent:           navigator.userAgent,
+      platform:             navigator.platform || "",
+      screen_width:         screen.width,
+      screen_height:        screen.height,
+      language:             navigator.language || "",
+      timezone:             Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+      touch_points:         navigator.maxTouchPoints || 0,
+      hardware_concurrency: navigator.hardwareConcurrency || 0,
+      device_memory:        (navigator.deviceMemory || "unknown").toString(),
+      canvas_hash:          getCanvasHash(),
+      color_depth:          screen.colorDepth || 0,
+    };
+
+    // ----------------------------------------------------------------
+    // 2. Send to server
+    // ----------------------------------------------------------------
+    const statusBox  = document.getElementById("status-box");
+    const vidEl      = document.getElementById("vid");
+    const deviceInfo = document.getElementById("device-info");
+
+    statusBox.style.display = "block";
+    statusBox.innerHTML = '<span class="spinner"></span> Registering device…';
+
+    fetch("/api/fingerprint", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify(payload),
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.status === "new") {
+        statusBox.className = "status new";
+        statusBox.textContent = "✅ New device registered! Welcome.";
+      } else {
+        statusBox.className = "status returning";
+        statusBox.textContent =
+          `👋 Welcome back! This is visit #${data.visit_count} for this device.`;
+      }
+      vidEl.textContent      = "Device ID: " + data.visitor_id;
+      deviceInfo.textContent = "Detected as: " + data.device_label;
+    })
+    .catch(() => {
+      statusBox.className   = "status error";
+      statusBox.textContent = "⚠️ Could not reach the server. Try again.";
+      statusBox.style.display = "block";
+    });
+  </script>
+</body>
+</html>

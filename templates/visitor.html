@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Visitor {{ visitor.visitor_id }} — Fingerprint Server</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f0f0f; color: #f0f0f0; padding: 2rem;
+    }
+    a { color: #818cf8; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    h1 { color: #a78bfa; margin-bottom: 0.25rem; }
+    .back { margin-bottom: 1.5rem; font-size: 0.9rem; }
+    .card {
+      background: #1a1a2e; border: 1px solid #3a3a5c;
+      border-radius: 12px; padding: 1.5rem; max-width: 600px;
+      margin-bottom: 1.5rem;
+    }
+    .card h2 { color: #c4b5fd; margin-bottom: 1rem; font-size: 1rem; }
+    dl { display: grid; grid-template-columns: 160px 1fr; gap: 8px 12px; }
+    dt { color: #888; font-size: 0.85rem; }
+    dd { font-size: 0.9rem; word-break: break-all; font-family: monospace; }
+  </style>
+</head>
+<body>
+  <p class="back"><a href="/dashboard">← Back to Dashboard</a></p>
+  <h1>{{ visitor.device_label }}</h1>
+  <p style="color:#888; margin-bottom:1.5rem; font-size:0.85rem;">
+    ID: <span style="font-family:monospace">{{ visitor.visitor_id }}</span>
+  </p>
+
+  <div class="card">
+    <h2>Visit Stats</h2>
+    <dl>
+      <dt>Total visits</dt>  <dd>{{ visitor.visit_count }}</dd>
+      <dt>First seen</dt>    <dd>{{ visitor.first_seen }}</dd>
+      <dt>Last seen</dt>     <dd>{{ visitor.last_seen }}</dd>
+    </dl>
+  </div>
+
+  <div class="card">
+    <h2>Device Attributes</h2>
+    <dl>
+      <dt>Platform</dt>      <dd>{{ visitor.platform }}</dd>
+      <dt>Screen</dt>        <dd>{{ visitor.screen_resolution }}</dd>
+      <dt>Language</dt>      <dd>{{ visitor.language }}</dd>
+      <dt>Timezone</dt>      <dd>{{ visitor.timezone }}</dd>
+      <dt>Touch points</dt>  <dd>{{ visitor.touch_points }}</dd>
+      <dt>CPU cores</dt>     <dd>{{ visitor.hardware_concurrency }}</dd>
+      <dt>Device memory</dt> <dd>{{ visitor.device_memory }} GB</dd>
+      <dt>Canvas hash</dt>   <dd>{{ visitor.canvas_hash }}</dd>
+    </dl>
+  </div>
+
+  <div class="card">
+    <h2>User Agent</h2>
+    <p style="font-family:monospace; font-size:0.78rem; color:#aaa; word-break:break-all;">
+      {{ visitor.user_agent }}
+    </p>
+  </div>
+</body>
+</html>
