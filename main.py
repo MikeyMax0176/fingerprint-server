@@ -1,6 +1,7 @@
 """
 Fingerprint Server — FastAPI backend
 """
+import asyncio
 import hashlib
 import httpx
 import json
@@ -10,8 +11,9 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import BackgroundTasks, FastAPI, Depends, Request, HTTPException, status
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -19,9 +21,22 @@ from sqlalchemy.orm import Session
 from database import create_tables, get_db, Visitor
 
 app = FastAPI(title="Fingerprint Server")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 security = HTTPBasic()
 create_tables()
+
+# SSE broadcast queue — dashboard subscribers listen here
+_sse_subscribers: list[asyncio.Queue] = []
+
+
+async def broadcast_new_visitor(visitor_data: dict):
+    """Push a new-visitor event to all connected dashboard SSE clients."""
+    for q in list(_sse_subscribers):
+        try:
+            q.put_nowait(visitor_data)
+        except asyncio.QueueFull:
+            pass
 
 # ---------------------------------------------------------------------------
 # Dashboard auth — set DASHBOARD_USER and DASHBOARD_PASS in Railway settings
@@ -305,6 +320,16 @@ async def receive_fingerprint(
         + (f"📡 <b>Local IP:</b> <code>{payload.local_ip}</code>\n" if payload.local_ip else "")
     )
     background_tasks.add_task(send_telegram, msg)
+    background_tasks.add_task(broadcast_new_visitor, {
+        "visitor_id":   visitor_id,
+        "device_label": device_label,
+        "ip_address":   ip_address,
+        "country":      country,
+        "screen":       f"{payload.screen_width}×{payload.screen_height}",
+        "timezone":     payload.timezone,
+        "first_seen":   datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+        "visit_count":  1,
+    })
 
     return {
         "visitor_id":   visitor_id,
@@ -312,6 +337,49 @@ async def receive_fingerprint(
         "device_label": device_label,
         "visit_count":  1,
     }
+
+
+@app.get("/test-telegram")
+async def test_telegram(_=Depends(require_auth)):
+    """Send a test message to confirm TELEGRAM_TOKEN and TELEGRAM_CHAT_ID are set correctly."""
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+        raise HTTPException(status_code=400, detail="TELEGRAM_TOKEN or TELEGRAM_CHAT_ID not set")
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.post(url, json={
+                "chat_id": TELEGRAM_CHAT_ID,
+                "text": "✅ <b>Fingerprint server Telegram test</b> — notifications are working!",
+                "parse_mode": "HTML",
+            })
+        if r.status_code == 200:
+            return {"status": "ok", "message": "Test message sent successfully"}
+        return {"status": "error", "telegram_status": r.status_code, "detail": r.text}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/events")
+async def sse_events(request: Request, _=Depends(require_auth)):
+    """Server-Sent Events stream for live dashboard updates."""
+    q: asyncio.Queue = asyncio.Queue(maxsize=50)
+    _sse_subscribers.append(q)
+
+    async def event_stream():
+        try:
+            yield "data: connected\n\n"
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    data = await asyncio.wait_for(q.get(), timeout=15)
+                    yield f"data: {json.dumps(data)}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+        finally:
+            _sse_subscribers.remove(q)
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 @app.get("/dashboard", response_class=HTMLResponse)

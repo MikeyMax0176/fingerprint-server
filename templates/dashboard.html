@@ -8,13 +8,31 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #0f0f0f; color: #f0f0f0; padding: 2rem; }
     h1 { color: #a78bfa; margin-bottom: 0.25rem; }
-    .meta { color: #888; font-size: 0.9rem; margin-bottom: 2rem; }
+    .meta { color: #888; font-size: 0.9rem; margin-bottom: 2rem; display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
     .badge { display:inline-block; background:#3730a3; color:#c7d2fe; border-radius:20px; padding:2px 10px; font-size:0.8rem; margin-left:8px; }
+    .live-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: #14532d; color: #86efac; border-radius: 20px;
+      padding: 3px 12px; font-size: 0.8rem;
+    }
+    .live-badge.connecting { background: #1e3a5f; color: #93c5fd; }
+    .live-badge.disconnected { background: #3b1515; color: #fca5a5; }
+    .dot {
+      width: 8px; height: 8px; border-radius: 50%; background: #22c55e;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    .dot.off { background: #ef4444; animation: none; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
     .table-wrap { overflow-x: auto; }
     table { width:100%; border-collapse:collapse; font-size:0.82rem; min-width:1200px; }
     th { text-align:left; padding:9px 10px; background:#1a1a2e; color:#a78bfa; border-bottom:2px solid #3a3a5c; white-space:nowrap; }
     td { padding:9px 10px; border-bottom:1px solid #1e1e1e; vertical-align:top; }
     tr:hover td { background: #1a1a2e; }
+    tr.new-row td { animation: flashRow 2s ease-out forwards; }
+    @keyframes flashRow {
+      0%   { background: #1a3a1a; }
+      100% { background: transparent; }
+    }
     .mono { font-family:monospace; font-size:0.76rem; color:#aaa; }
     .bold { font-weight:600; }
     a { color:#818cf8; text-decoration:none; }
@@ -26,24 +44,24 @@
     .pill-gray   { background:#1f1f1f; color:#888; }
     .pill-orange { background:#431407; color:#fdba74; }
     .empty { text-align:center; padding:4rem; color:#555; }
-    .refresh { float:right; background:#3730a3; color:#e0e7ff; border:none; border-radius:8px; padding:8px 16px; cursor:pointer; font-size:0.85rem; }
-    .refresh:hover { background:#4338ca; }
     .ip { font-family:monospace; font-size:0.78rem; color:#67e8f9; }
   </style>
 </head>
 <body>
   <h1>
     Fingerprint Dashboard
-    <span class="badge">{{ total }} device{{ 's' if total != 1 else '' }}</span>
+    <span class="badge" id="total-badge">{{ total }} device{{ 's' if total != 1 else '' }}</span>
   </h1>
   <p class="meta">
     All unique visitors who tapped an NFC tag.
-    <button class="refresh" onclick="location.reload()">↻ Refresh</button>
+    <span class="live-badge connecting" id="live-badge">
+      <span class="dot off" id="live-dot"></span>
+      <span id="live-label">Connecting…</span>
+    </span>
   </p>
 
-  {% if visitors %}
   <div class="table-wrap">
-  <table>
+  <table id="visitors-table">
     <thead>
       <tr>
         <th>#</th>
@@ -64,7 +82,8 @@
         <th>Last Seen</th>
       </tr>
     </thead>
-    <tbody>
+    <tbody id="visitors-body">
+      {% if visitors %}
       {% for v in visitors %}
       <tr>
         <td>{{ loop.index }}</td>
@@ -105,13 +124,87 @@
         <td class="mono" style="font-size:0.72rem; white-space:nowrap;">{{ v.last_seen.strftime('%m-%d %H:%M') if v.last_seen else '—' }}</td>
       </tr>
       {% endfor %}
+      {% else %}
+      <tr id="empty-row"><td colspan="16" class="empty">No visitors yet. Program your NFC tag with this server's URL and tap a device.</td></tr>
+      {% endif %}
     </tbody>
   </table>
   </div>
-  {% else %}
-  <div class="empty">
-    <p>No visitors yet.<br>Program your NFC tag with this server's URL and tap a device.</p>
-  </div>
-  {% endif %}
+
+  <script>
+  let totalCount = {{ total }};
+
+  function buildRow(v, rowNum) {
+    return `<tr class="new-row">
+      <td>${rowNum}</td>
+      <td class="mono"><a href="/visitor/${v.visitor_id}">${v.visitor_id}</a></td>
+      <td class="ip">${v.ip_address || '—'}${v.country ? `<br><span class="pill pill-blue">${v.country}</span>` : ''}</td>
+      <td class="bold">${v.device_label || '—'}</td>
+      <td class="mono">${v.screen || '—'}</td>
+      <td style="max-width:180px;word-break:break-word;font-size:0.75rem;color:#c4b5fd;">—</td>
+      <td class="mono" style="font-size:0.72rem;color:#86efac;">—</td>
+      <td>—</td>
+      <td class="mono">—</td>
+      <td>—</td>
+      <td>—</td>
+      <td class="mono">${v.timezone || '—'}</td>
+      <td class="mono" style="font-size:0.72rem;color:#f9a8d4;">—</td>
+      <td>${v.visit_count}</td>
+      <td class="mono" style="font-size:0.72rem;white-space:nowrap;">${v.first_seen || '—'}</td>
+      <td class="mono" style="font-size:0.72rem;white-space:nowrap;">${v.first_seen || '—'}</td>
+    </tr>`;
+  }
+
+  function setLive(state) {
+    const badge = document.getElementById('live-badge');
+    const dot   = document.getElementById('live-dot');
+    const label = document.getElementById('live-label');
+    if (state === 'live') {
+      badge.className = 'live-badge';
+      dot.className   = 'dot';
+      label.textContent = 'Live';
+    } else if (state === 'connecting') {
+      badge.className = 'live-badge connecting';
+      dot.className   = 'dot off';
+      label.textContent = 'Connecting…';
+    } else {
+      badge.className = 'live-badge disconnected';
+      dot.className   = 'dot off';
+      label.textContent = 'Disconnected — reload to reconnect';
+    }
+  }
+
+  function connect() {
+    setLive('connecting');
+    const es = new EventSource('/events');
+
+    es.onopen = () => setLive('live');
+
+    es.onmessage = (e) => {
+      if (e.data === 'connected') return;
+      try {
+        const v = JSON.parse(e.data);
+        totalCount++;
+        const badge = document.getElementById('total-badge');
+        badge.textContent = `${totalCount} device${totalCount !== 1 ? 's' : ''}`;
+
+        const emptyRow = document.getElementById('empty-row');
+        if (emptyRow) emptyRow.remove();
+
+        const tbody = document.getElementById('visitors-body');
+        tbody.insertAdjacentHTML('afterbegin', buildRow(v, totalCount));
+      } catch(err) {}
+    };
+
+    es.onerror = () => {
+      setLive('disconnected');
+      es.close();
+      // Reconnect after 5 seconds
+      setTimeout(connect, 5000);
+    };
+  }
+
+  connect();
+  </script>
 </body>
 </html>
